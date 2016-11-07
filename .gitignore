@@ -1,2 +1,10 @@
 networks.yml
 .byebug_history
+.DS_Store
+*.pyc
+node_modules
+.bash_history
+logs/
+src/
+.cache
+.ipython

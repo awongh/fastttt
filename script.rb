@@ -34,12 +34,19 @@ def exec_with_timeout(cmd, timeout)
 
       stdout = rout.readlines.join
       stderr = rerr.readlines.join
+      puts "speedtest stdout"
+      puts stdout
+      puts "speedtest stderr"
+      puts stderr
     end
 
-  rescue Timeout::Error
+  rescue Timeout::Error => e
+    puts "rescuing"
+    pp e
     Process.kill(-9, pid)
     Process.detach(pid)
   ensure
+    puts "ensure"
     wout.close unless wout.closed?
     werr.close unless werr.closed?
     # dispose the read ends of the pipes
@@ -52,15 +59,17 @@ end
 def run_speed_test
   speed = ''
 
-  command = 'speedtest-cli --simple --timeout 60'
+  command = 'speedtest-cli --simple --timeout 60 --secure'
 
-  speed = exec_with_timeout( command, 180 )
+  speed = exec_with_timeout( command, 70 )
 
-  if( speed.empty? )
+  if( !speed || speed.empty? )
     puts "running speed test one more time"
     sleep(5)
-    speed = exec_with_timeout( command, 180 )
+    speed = exec_with_timeout( command, 70 )
   end
+  puts "returning speed val"
+  pp speed
 
   speed
 end
@@ -82,7 +91,7 @@ exml = xml_str.encode('UTF-8', 'binary', invalid: :replace, undef: :replace, rep
 
 hash = Hash.from_xml(exml)
 
-if( hash['plist'].nil? || hash['plist']['array'].nil? || hash['plist']['array']['dict'].nil? )
+if( !hash || hash['plist'].nil? || hash['plist']['array'].nil? || hash['plist']['array']['dict'].nil? )
   puts "coouldnt find any networks"
   exit
 end
@@ -95,6 +104,7 @@ results = hash['plist']['array']['dict'].map do |wifi|
 
   result[:rssi] = wifi['integer'].last
 
+  printf "%-31s %s\n", result[:name], result[:rssi]
   if( networks[ result[:name] ].nil? )
     nil
   else
@@ -173,7 +183,7 @@ speed_results = ordered_results.take(look_at).each_with_index.map do |wifi, idx|
 
         puts "\n" + wifi[:name] + " >>> ping: " + ping.to_s + " dl: " + download_speed.to_s + " ul: " + upload_speed.to_s
         result = wifi
-        if( $find_all == nil && download_speed > 10 && upload_speed > 5 )
+        if( $find_all == nil && download_speed > 10 && upload_speed > 2 )
           #stop everything, we found it
           exit
         end
@@ -186,14 +196,18 @@ speed_results = ordered_results.take(look_at).each_with_index.map do |wifi, idx|
 end
 
 puts "sorting results"
-#sort
-speed_results.sort_by!{ |result| result[:download_speed] }
+speed_results = speed_results.compact
+pp speed_results
 
 if( speed_results.empty? )
 
   puts "nothing good found!!!!"
   pp speed_results
 else
+
+  #sort
+  speed_results.sort_by! { |result| result[:download_speed] }
+
   best = speed_results.pop
 
   final_network = best[:name]
