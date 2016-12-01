@@ -5,7 +5,19 @@ require 'active_support/core_ext/hash/conversions'
 require 'pp'
 require 'optparse'
 require 'timeout'
-require 'yaml'
+require 'json'
+
+###############################################################################
+###############################################################################
+#
+#
+#
+#                                 Helper Things
+#
+#
+###############################################################################
+###############################################################################
+
 
 # from: http://stackoverflow.com/questions/12714186/reposition-an-element-to-the-front-of-an-array-in-ruby
 class Array
@@ -80,41 +92,100 @@ OptionParser.new do |o|
   o.parse!
 end
 
-# number of networks to look at
-look_at = 8
+# one level deep, check to see if this network name exists
+def network?( networks, name )
+  if( !networks[ name ].nil? )
+    return true
+  else
+    networks.each do |j|
+      if j.respond_to? :each
+        j.each_with_index do |val,idx|
+          if val == name
+            return true
+          end
+        end
+      end
+    end
+  end
 
-networks = YAML.load_file('networks.yml')
+  return false
+end
 
+def get_password( networks, name )
+  if( !networks[ name ].nil? )
+    return networks[ name ]
+  else
+    networks.each do |j|
+      if j.respond_to? :each
+        j.each_with_index do |val,idx|
+          if val == name
+            return j[1]
+          end
+        end
+      end
+    end
+  end
+
+  return false
+end
+
+
+
+
+###############################################################################
+###############################################################################
+#
+#
+#
+#                                 Run Things
+#
+#
+###############################################################################
+###############################################################################
+
+
+
+###############################################################################
+#
+#                         get netowrks, process xml
+###############################################################################
+
+networks = JSON.parse( File.read('networks.json') )
+
+# get an xml doc of networks
 xml_str = `/System/Library/PrivateFrameworks/Apple80211.framework/Versions/A/Resources/airport -s -x`
 # from: https://robots.thoughtbot.com/fight-back-utf-8-invalid-byte-sequences
 exml = xml_str.encode('UTF-8', 'binary', invalid: :replace, undef: :replace, replace: '')
 
+# process the hash of networks
+
 hash = Hash.from_xml(exml)
 
 if( !hash || hash['plist'].nil? || hash['plist']['array'].nil? || hash['plist']['array']['dict'].nil? )
-  puts "coouldnt find any networks"
+  puts "Couldn't find any networks"
   exit
 end
 
-puts "networks we found:"
-puts "==============================="
-
+# do weird things with xml doc - plist etc
+# and sort it
 results = hash['plist']['array']['dict'].map do |wifi|
   result = {name: wifi['string'][1]}
 
   result[:rssi] = wifi['integer'].last
 
-  printf "%-31s %s\n", result[:name], result[:rssi]
-  if( networks[ result[:name] ].nil? )
+  #if( networks[ result[:name] ].nil? )
+  if( network?(networks, result[:name] ) )
     nil
   else
 
     result
   end
 
-
 end.compact.sort_by!{|result| result[:rssi] }
 
+# print out the networks
+puts "networks we found:"
+puts "==============================="
 results.each do |r| 
     printf "%-31s %s\n", r[:name], r[:rssi]
 end
@@ -129,10 +200,18 @@ else
   ordered_results = results
 end
 
-speed_results = ordered_results.take(look_at).each_with_index.map do |wifi, idx|
-#speed_results = ordered_results.select{ |g| g[:name] == 'Freeware 1_5GHz' }.map do |wifi|
+###############################################################################
+#
+#                        run speed test
+###############################################################################
 
-  password = networks[wifi[:name]]
+# number of networks to look at
+look_at = 8
+
+speed_results = ordered_results.take(look_at).each_with_index.map do |wifi, idx|
+
+  password = get_password( networks, wifi[:name])
+  #password = networks[wifi[:name]]
   result = nil
 
   if( password != nil )
@@ -152,8 +231,6 @@ speed_results = ordered_results.take(look_at).each_with_index.map do |wifi, idx|
       end
 
       puts "\njoin net result: "+command_result.to_s
-
-
     end
 
     if( command_result == true )
@@ -194,6 +271,11 @@ speed_results = ordered_results.take(look_at).each_with_index.map do |wifi, idx|
 
   result
 end
+
+###############################################################################
+#
+#                 if we need to, process speed test results
+###############################################################################
 
 puts "sorting results"
 speed_results = speed_results.compact
