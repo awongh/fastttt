@@ -4,7 +4,7 @@
 - ( you need pip and python )
 - `pip install -r requirements.txt`
 - `bundle install`
-- you need a yaml file of every wifi network you want to connect to and the passwords (no it doesnt remember them)
+- you need a json file of every wifi network you want to connect to and the passwords (no it doesnt remember them)
 
 #### run
 `./script.rb` find the network that's over 10mbps
