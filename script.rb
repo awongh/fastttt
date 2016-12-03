@@ -46,19 +46,17 @@ def exec_with_timeout(cmd, timeout)
 
       stdout = rout.readlines.join
       stderr = rerr.readlines.join
-      puts "speedtest stdout"
+      puts "speedtest stdout: " + stdout
       puts stdout
-      puts "speedtest stderr"
-      puts stderr
+      puts "speedtest stderr: " + stderr
     end
 
   rescue Timeout::Error => e
-    puts "rescuing"
-    pp e
+    puts "timeout error rescue: " + e
     Process.kill(-9, pid)
     Process.detach(pid)
   ensure
-    puts "ensure"
+    puts "Ensure"
     wout.close unless wout.closed?
     werr.close unless werr.closed?
     # dispose the read ends of the pipes
@@ -76,12 +74,12 @@ def run_speed_test
   speed = exec_with_timeout( command, 70 )
 
   if( !speed || speed.empty? )
-    puts "running speed test one more time"
+    puts "error: running speed test one more time"
     sleep(5)
     speed = exec_with_timeout( command, 70 )
   end
-  puts "returning speed val"
-  pp speed
+  #puts "returning speed val"
+  #pp speed
 
   speed
 end
@@ -94,38 +92,28 @@ end
 
 # one level deep, check to see if this network name exists
 def network?( networks, name )
-  if( !networks[ name ].nil? )
+  if get_password( networks, name )
     return true
-  else
-    networks.each do |j|
-      if j.respond_to? :each
-        j.each_with_index do |val,idx|
-          if val == name
-            return true
-          end
-        end
-      end
-    end
   end
 
-  return false
+  false
 end
 
 def get_password( networks, name )
   if( !networks[ name ].nil? )
     return networks[ name ]
   else
-    networks.each do |j|
-      if j.respond_to? :each
-        j.each_with_index do |val,idx|
-          if val == name
-            return j[1]
+    networks.each do |key, network|
+      # is it a network group
+      if network.respond_to? :each
+        network.each do |network_name,password|
+          if network_name == name
+            return password
           end
         end
       end
     end
   end
-
   return false
 end
 
@@ -162,7 +150,7 @@ exml = xml_str.encode('UTF-8', 'binary', invalid: :replace, undef: :replace, rep
 hash = Hash.from_xml(exml)
 
 if( !hash || hash['plist'].nil? || hash['plist']['array'].nil? || hash['plist']['array']['dict'].nil? )
-  puts "Couldn't find any networks"
+  puts "Error: couldn't find any networks"
   exit
 end
 
@@ -175,10 +163,9 @@ results = hash['plist']['array']['dict'].map do |wifi|
 
   #if( networks[ result[:name] ].nil? )
   if( network?(networks, result[:name] ) )
-    nil
-  else
-
     result
+  else
+    nil
   end
 
 end.compact.sort_by!{|result| result[:rssi] }
@@ -210,8 +197,16 @@ look_at = 8
 
 speed_results = ordered_results.take(look_at).each_with_index.map do |wifi, idx|
 
+  # TODO:
+  # if we've already run a thing that's in this group, skip it
   password = get_password( networks, wifi[:name])
   #password = networks[wifi[:name]]
+
+  if password == false
+    pp "Error: couldn't find a password for: " + wifi[:name]
+    next
+  end
+
   result = nil
 
   if( password != nil )
@@ -220,13 +215,12 @@ speed_results = ordered_results.take(look_at).each_with_index.map do |wifi, idx|
     else
 
       command = "networksetup -setairportnetwork en0 '#{wifi[:name]}' '#{password}'"
-      puts "\nrunning: " + command
+      puts "\njoining network- running: " + command
 
       begin
         command_result = system(command)
       rescue => e
-        puts "network error"
-        pp e
+        pp "network error: " + e
         next
       end
 
@@ -235,7 +229,7 @@ speed_results = ordered_results.take(look_at).each_with_index.map do |wifi, idx|
 
     if( command_result == true )
       current_network = wifi[:name]
-      puts "\nwaiting 10 secs and running speed test"
+      puts "\nWaiting...... 10 secs and running speed test"
       sleep(10)
 
       #run the speed test
@@ -246,7 +240,7 @@ speed_results = ordered_results.take(look_at).each_with_index.map do |wifi, idx|
         speed_results = speed.split("\n").map{ |i| i.split(": ") }.map{ |i| i.map{ |j| j.split(" ")} }
 
         if( speed_results[0].nil? || speed_results[1].nil? || speed_results[0][1].nil? || speed_results[1][1].nil? ||speed_results[2][1].nil? )
-          puts "bad speed results for "+wifi[:name]
+          puts "error: bad speed results for "+wifi[:name]
           next
         end
 
@@ -283,7 +277,7 @@ pp speed_results
 
 if( speed_results.empty? )
 
-  puts "nothing good found!!!!"
+  puts "Error: nothing good found!!!!"
   pp speed_results
 else
 
@@ -302,13 +296,12 @@ else
   end
 
   command = "networksetup -setairportnetwork en0 '#{final_network}' '#{final_password}'"
-  puts "\nrunning: " + command
+  puts "\nJoining network- running: " + command
   #switch netowrks
   begin
     command_result = system(command)
   rescue => e
-    puts "network error"
-    pp e
+    pp "network error: " + e
   end
 
 end
