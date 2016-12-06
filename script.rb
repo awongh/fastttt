@@ -46,17 +46,17 @@ def exec_with_timeout(cmd, timeout)
 
       stdout = rout.readlines.join
       stderr = rerr.readlines.join
-      puts "speedtest stdout: " + stdout
-      puts stdout
-      puts "speedtest stderr: " + stderr
+      #puts "speedtest stdout: " + stdout
+      #puts stdout
+      #puts "Error: speedtest stderr: " + stderr
     end
 
   rescue Timeout::Error => e
-    puts "timeout error rescue: " + e
+    puts "Error: timeout rescue: " + e.message
     Process.kill(-9, pid)
     Process.detach(pid)
   ensure
-    puts "Ensure"
+    #puts "Ensure"
     wout.close unless wout.closed?
     werr.close unless werr.closed?
     # dispose the read ends of the pipes
@@ -74,7 +74,7 @@ def run_speed_test
   speed = exec_with_timeout( command, 70 )
 
   if( !speed || speed.empty? )
-    puts "error: running speed test one more time"
+    puts "Error: running speed test one more time"
     sleep(5)
     speed = exec_with_timeout( command, 70 )
   end
@@ -220,7 +220,7 @@ speed_results = ordered_results.take(look_at).each_with_index.map do |wifi, idx|
       begin
         command_result = system(command)
       rescue => e
-        pp "network error: " + e
+        pp "Error: network error: " + e
         next
       end
 
@@ -240,7 +240,7 @@ speed_results = ordered_results.take(look_at).each_with_index.map do |wifi, idx|
         speed_results = speed.split("\n").map{ |i| i.split(": ") }.map{ |i| i.map{ |j| j.split(" ")} }
 
         if( speed_results[0].nil? || speed_results[1].nil? || speed_results[0][1].nil? || speed_results[1][1].nil? ||speed_results[2][1].nil? )
-          puts "error: bad speed results for "+wifi[:name]
+          puts "Error: bad speed results for "+wifi[:name]
           next
         end
 
@@ -273,7 +273,7 @@ end
 
 puts "sorting results"
 speed_results = speed_results.compact
-pp speed_results
+#pp speed_results
 
 if( speed_results.empty? )
 
@@ -301,7 +301,7 @@ else
   begin
     command_result = system(command)
   rescue => e
-    pp "network error: " + e
+    pp "Error: network error: " + e
   end
 
 end
