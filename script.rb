@@ -171,17 +171,18 @@ results = hash['plist']['array']['dict'].map do |wifi|
 end.compact.sort_by!{|result| result[:rssi] }
 
 # print out the networks
-puts "networks we found:"
-puts "==============================="
+puts "Networks:"
+puts "\n=======================================================\n"
 results.each do |r| 
     printf "%-31s %s\n", r[:name], r[:rssi]
 end
+puts "\n=======================================================\n"
 
 # get current network
 cnetwork = `networksetup -getairportnetwork en0`
 current_network = cnetwork.chomp.split(": ")[1]
 if( current_network )
-  puts "\ncurrent network: "+current_network
+  puts "\nLog: Current Network: "+current_network
   ordered_results = results.promote( current_network, :name )
 else
   ordered_results = results
@@ -215,7 +216,7 @@ speed_results = ordered_results.take(look_at).each_with_index.map do |wifi, idx|
     else
 
       command = "networksetup -setairportnetwork en0 '#{wifi[:name]}' '#{password}'"
-      puts "\njoining network- running: " + command
+      puts "\nDebug: Joining Network: running: " + command
 
       begin
         command_result = system(command)
@@ -224,7 +225,7 @@ speed_results = ordered_results.take(look_at).each_with_index.map do |wifi, idx|
         next
       end
 
-      puts "\njoin net result: "+command_result.to_s
+      puts "\nDebug: Joining Network Result: "+command_result.to_s
     end
 
     if( command_result == true )
@@ -252,7 +253,7 @@ speed_results = ordered_results.take(look_at).each_with_index.map do |wifi, idx|
         wifi[:download_speed] = download_speed
         wifi[:upload_speed] = upload_speed
 
-        puts "\n" + wifi[:name] + " >>> ping: " + ping.to_s + " dl: " + download_speed.to_s + " ul: " + upload_speed.to_s
+        puts "\nLog: " + idx.to_s + " : Network: " + wifi[:name] + ": Speed Result >>> ping: " + ping.to_s + " dl: " + download_speed.to_s + " ul: " + upload_speed.to_s
         result = wifi
         if( $find_all == nil && download_speed > 10 && upload_speed > 2 )
           #stop everything, we found it
@@ -271,13 +272,13 @@ end
 #                 if we need to, process speed test results
 ###############################################################################
 
-puts "sorting results"
+#puts "Log: Sorting Results"
 speed_results = speed_results.compact
 #pp speed_results
 
 if( speed_results.empty? )
 
-  puts "Error: nothing good found!!!!"
+  puts "\nError: Fatal: All results are empty. Try running again.\n"
   pp speed_results
 else
 
@@ -291,12 +292,12 @@ else
   final_password = networks[ best[:name] ]
 
   if( current_network == final_network )
-    puts "youre connected to "+ final_network
+    puts "\nLog: You're connected to: "+ final_network + "\n"
     exit
   end
 
   command = "networksetup -setairportnetwork en0 '#{final_network}' '#{final_password}'"
-  puts "\nJoining network- running: " + command
+  puts "\nDebug: Joining Network: running: " + command
   #switch netowrks
   begin
     command_result = system(command)
