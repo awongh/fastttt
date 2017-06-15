@@ -6,6 +6,9 @@ require 'pp'
 require 'optparse'
 require 'timeout'
 require 'json'
+require 'pty'
+require 'expect'
+
 
 ###############################################################################
 ###############################################################################
@@ -29,55 +32,86 @@ end
 
 # from: http://stackoverflow.com/questions/8292031/ruby-timeouts-and-system-commands
 def exec_with_timeout(cmd, timeout)
+
+  foo = nil
   begin
-    # stdout, stderr pipes
-    rout, wout = IO.pipe
-    rerr, werr = IO.pipe
-    stdout, stderr = nil
 
-    pid = Process.spawn(cmd, pgroup: true, :out => wout, :err => werr)
+    data = Timeout.timeout(timeout) do
 
-    Timeout.timeout(timeout) do
-      Process.waitpid(pid)
+      # stdout, stderr pipes
+      #rout, wout = IO.pipe
+      #rerr, werr = IO.pipe
+      #stdout, stderr = nil
+      rout, wout, pid = PTY.spawn( cmd )
+
+      data = []
+
+
+      loop do
+        rout.expect(/\n/) { |line| data.push line}
+        if data[-1].nil?
+          foo = JSON.parse( data[0][0] )
+          break
+        end
+        p data[-1]
+      end
 
       # close write ends so we can read from them
       wout.close
-      werr.close
 
-      stdout = rout.readlines.join
-      stderr = rerr.readlines.join
-      #puts "speedtest stdout: " + stdout
-      #puts stdout
-      #puts "Error: speedtest stderr: " + stderr
+      #Process.kill(9, pid)
+
+      rout.close
+
+      #Process.wait(pid) rescue PTY::ChildExited
+      return foo
     end
+
+  rescue JSON::ParserError => e
+    puts "Error: JSON rescue: " + e.message
+    byebug
+
+  rescue Errno::EIO => e
+    byebug
 
   rescue Timeout::Error => e
     puts "Error: timeout rescue: " + e.message
     Process.kill(-9, pid)
     Process.detach(pid)
-  ensure
-    #puts "Ensure"
-    wout.close unless wout.closed?
-    werr.close unless werr.closed?
-    # dispose the read ends of the pipes
-    rout.close
-    rerr.close
   end
-  stdout
+
+  if( defined? pid != nil )
+    Process.kill(9, pid)
+    Process.wait(pid) rescue PTY::ChildExited
+  end
+
+  if( defined? wout != nil )
+    wout.close
+  end
+
+  if( defined? rout != nil )
+    rout.close
+  end
+
+  foo
 end
 
 def run_speed_test
   speed = ''
 
-  command = 'speedtest-cli --simple --timeout 60 --secure'
+  command = 'speedtest-cli --json --timeout 60'
+  #command = './src/speedtest-cli/speedtest.py --json --timeout 60'
+  puts command
 
-  speed = exec_with_timeout( command, 70 )
+  speed = exec_with_timeout( command, 120 )
 
   if( !speed || speed.empty? )
     puts "Error: running speed test one more time"
     sleep(5)
-    speed = exec_with_timeout( command, 70 )
+    speed = exec_with_timeout( command, 120 )
+
   end
+
   #puts "returning speed val"
   #pp speed
 
@@ -238,16 +272,9 @@ speed_results = ordered_results.take(look_at).each_with_index.map do |wifi, idx|
 
       if( speed.present? )
 
-        speed_results = speed.split("\n").map{ |i| i.split(": ") }.map{ |i| i.map{ |j| j.split(" ")} }
-
-        if( speed_results[0].nil? || speed_results[1].nil? || speed_results[0][1].nil? || speed_results[1][1].nil? ||speed_results[2][1].nil? )
-          puts "Error: bad speed results for "+wifi[:name]
-          next
-        end
-
-        ping = speed_results[0][1][0].to_f
-        download_speed = speed_results[1][1][0].to_f
-        upload_speed = speed_results[2][1][0].to_f
+        ping = speed["ping"]
+        download_speed = speed["download"] / 1000000
+        upload_speed = speed["upload"] / 1000000
 
         wifi[:ping] = ping
         wifi[:download_speed] = download_speed
