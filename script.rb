@@ -69,15 +69,13 @@ def exec_with_timeout(cmd, timeout)
 
   rescue JSON::ParserError => e
     puts "Error: JSON rescue: " + e.message
-    byebug
-
-  rescue Errno::EIO => e
-    byebug
 
   rescue Timeout::Error => e
     puts "Error: timeout rescue: " + e.message
-    Process.kill(-9, pid)
-    Process.detach(pid)
+    if( defined? pid != nil )
+      Process.kill(-9, pid)
+      Process.detach(pid)
+    end
   end
 
   if( defined? pid != nil )
@@ -99,7 +97,7 @@ end
 def run_speed_test
   speed = ''
 
-  command = 'speedtest-cli --json --timeout 60'
+  command = 'speedtest-cli --json --timeout 90'
   #command = './src/speedtest-cli/speedtest.py --json --timeout 60'
   puts command
 
@@ -253,16 +251,21 @@ speed_results = ordered_results.take(look_at).each_with_index.map do |wifi, idx|
       puts "\nDebug: Joining Network: running: " + command
 
       begin
-        command_result = system(command)
+        command_result = `#{command}`
+
+        if command_result.match('^Failed') != nil || command_result.match('^Could not') != nil
+          raise command_result
+        end
+
       rescue => e
-        pp "Error: network error: " + e
+        pp "Error: network error: " + e.to_s
         next
       end
 
       puts "\nDebug: Joining Network Result: "+command_result.to_s
     end
 
-    if( command_result == true )
+    if command_result == true || command_result.match('^Failed') == nil || command_result.match('^Could not') == nil
       current_network = wifi[:name]
       puts "\nWaiting...... 10 secs and running speed test"
       sleep(10)
@@ -327,9 +330,14 @@ else
   puts "\nDebug: Joining Network: running: " + command
   #switch netowrks
   begin
-    command_result = system(command)
+    command_result = `#{command}`
+
+    if command_result.match('^Failed') != nil
+      raise command_result
+    end
+
   rescue => e
-    pp "Error: network error: " + e
+    pp "Error: network error: " + e.to_s
   end
 
 end
